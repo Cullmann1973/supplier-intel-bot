@@ -23,6 +23,12 @@ import {
   Newspaper,
   Brain,
   RefreshCw,
+  Star,
+  MessageCircle,
+  FileWarning,
+  Gavel,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 
 interface NewsItem {
@@ -37,6 +43,26 @@ interface RiskFactor {
   category: string;
   level: 'low' | 'medium' | 'high';
   description: string;
+}
+
+interface ReputationIssue {
+  source: string;
+  type: 'consumer' | 'reddit' | 'news' | 'regulatory';
+  severity: 'minor' | 'moderate' | 'severe';
+  title: string;
+  snippet: string;
+  url: string;
+  date?: string;
+}
+
+interface ReputationScore {
+  overall: number;
+  consumerSentiment: number;
+  socialMediaSentiment: number;
+  mediaSentiment: number;
+  regulatoryCompliance: number;
+  issues: ReputationIssue[];
+  summary: string;
 }
 
 interface SupplierIntel {
@@ -63,6 +89,7 @@ interface SupplierIntel {
   certifications: string[];
   recentDevelopments: string[];
   aiAnalysis: string;
+  reputation: ReputationScore;
 }
 
 function IntelContent() {
@@ -169,6 +196,89 @@ function IntelContent() {
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
           <p className="text-lg text-slate-200 leading-relaxed">{intel.summary}</p>
         </div>
+
+        {/* Reputation Score Card */}
+        {intel.reputation && (
+          <div className={`border rounded-xl p-6 mb-8 ${
+            intel.reputation.overall >= 80 ? 'bg-green-900/20 border-green-700/50' :
+            intel.reputation.overall >= 60 ? 'bg-yellow-900/20 border-yellow-700/50' :
+            'bg-red-900/20 border-red-700/50'
+          }`}>
+            <div className="flex items-start justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-lg ${
+                  intel.reputation.overall >= 80 ? 'bg-green-600' :
+                  intel.reputation.overall >= 60 ? 'bg-yellow-600' :
+                  'bg-red-600'
+                }`}>
+                  <Star className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Reputation Score</h3>
+                  <p className="text-sm text-slate-400">Based on consumer feedback, Reddit, news & regulatory data</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className={`text-4xl font-bold ${
+                  intel.reputation.overall >= 80 ? 'text-green-400' :
+                  intel.reputation.overall >= 60 ? 'text-yellow-400' :
+                  'text-red-400'
+                }`}>
+                  {intel.reputation.overall}
+                </div>
+                <div className="text-sm text-slate-400">out of 100</div>
+              </div>
+            </div>
+
+            {/* Score Breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <ReputationBar 
+                icon={<ThumbsUp className="w-4 h-4" />} 
+                label="Consumer" 
+                score={intel.reputation.consumerSentiment} 
+              />
+              <ReputationBar 
+                icon={<MessageCircle className="w-4 h-4" />} 
+                label="Social Media" 
+                score={intel.reputation.socialMediaSentiment} 
+              />
+              <ReputationBar 
+                icon={<Newspaper className="w-4 h-4" />} 
+                label="Media" 
+                score={intel.reputation.mediaSentiment} 
+              />
+              <ReputationBar 
+                icon={<Gavel className="w-4 h-4" />} 
+                label="Regulatory" 
+                score={intel.reputation.regulatoryCompliance} 
+              />
+            </div>
+
+            {/* Summary */}
+            <p className={`text-sm mb-4 ${
+              intel.reputation.overall >= 80 ? 'text-green-300' :
+              intel.reputation.overall >= 60 ? 'text-yellow-300' :
+              'text-red-300'
+            }`}>
+              {intel.reputation.summary}
+            </p>
+
+            {/* Issues List */}
+            {intel.reputation.issues.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  <FileWarning className="w-4 h-4" />
+                  Issues Found ({intel.reputation.issues.length})
+                </h4>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {intel.reputation.issues.map((issue, i) => (
+                    <ReputationIssueCard key={i} issue={issue} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
@@ -430,5 +540,90 @@ function ESGBar({ icon, label, score }: { icon: React.ReactNode; label: string; 
         </div>
       </div>
     </div>
+  );
+}
+
+function ReputationBar({ icon, label, score }: { icon: React.ReactNode; label: string; score: number }) {
+  const getColor = (score: number) => {
+    if (score >= 80) return 'bg-green-500';
+    if (score >= 60) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const getTextColor = (score: number) => {
+    if (score >= 80) return 'text-green-400';
+    if (score >= 60) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  return (
+    <div className="bg-slate-800/50 rounded-lg p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-slate-400">{icon}</span>
+        <span className="text-xs text-slate-400">{label}</span>
+      </div>
+      <div className={`text-xl font-bold ${getTextColor(score)}`}>{score}</div>
+      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mt-2">
+        <div
+          className={`h-full ${getColor(score)} rounded-full transition-all duration-500`}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReputationIssueCard({ issue }: { issue: ReputationIssue }) {
+  const severityColors = {
+    minor: 'bg-slate-600/50 text-slate-300 border-slate-500/30',
+    moderate: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    severe: 'bg-red-500/20 text-red-400 border-red-500/30',
+  };
+
+  const typeIcons = {
+    consumer: <ThumbsDown className="w-3 h-3" />,
+    reddit: <MessageCircle className="w-3 h-3" />,
+    news: <Newspaper className="w-3 h-3" />,
+    regulatory: <Gavel className="w-3 h-3" />,
+  };
+
+  const typeLabels = {
+    consumer: 'Consumer',
+    reddit: 'Reddit',
+    news: 'News',
+    regulatory: 'Regulatory',
+  };
+
+  return (
+    <a
+      href={issue.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block p-3 bg-slate-800/30 rounded-lg hover:bg-slate-700/50 transition-colors border border-slate-700/30"
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`px-2 py-0.5 text-xs font-medium rounded border ${severityColors[issue.severity]}`}>
+            {issue.severity.toUpperCase()}
+          </span>
+          <span className="flex items-center gap-1 px-2 py-0.5 text-xs bg-slate-700/50 text-slate-400 rounded">
+            {typeIcons[issue.type]}
+            {typeLabels[issue.type]}
+          </span>
+        </div>
+        <ExternalLink className="w-3 h-3 text-slate-500 flex-shrink-0" />
+      </div>
+      <h5 className="text-sm text-white font-medium line-clamp-2 mb-1">{issue.title}</h5>
+      <p className="text-xs text-slate-400 line-clamp-2">{issue.snippet}</p>
+      <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+        <span>{issue.source}</span>
+        {issue.date && (
+          <>
+            <span>•</span>
+            <span>{issue.date}</span>
+          </>
+        )}
+      </div>
+    </a>
   );
 }

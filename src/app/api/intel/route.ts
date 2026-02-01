@@ -15,6 +15,26 @@ interface RiskFactor {
   description: string;
 }
 
+interface ReputationIssue {
+  source: string;
+  type: 'consumer' | 'reddit' | 'news' | 'regulatory';
+  severity: 'minor' | 'moderate' | 'severe';
+  title: string;
+  snippet: string;
+  url: string;
+  date?: string;
+}
+
+interface ReputationScore {
+  overall: number; // 0-100
+  consumerSentiment: number;
+  socialMediaSentiment: number;
+  mediaSentiment: number;
+  regulatoryCompliance: number;
+  issues: ReputationIssue[];
+  summary: string;
+}
+
 interface SupplierIntel {
   company: string;
   summary: string;
@@ -39,6 +59,7 @@ interface SupplierIntel {
   certifications: string[];
   recentDevelopments: string[];
   aiAnalysis: string;
+  reputation: ReputationScore;
 }
 
 async function searchBrave(query: string): Promise<any[]> {
@@ -299,6 +320,147 @@ function generateFallbackAnalysis(supplierName: string): Partial<SupplierIntel> 
   };
 }
 
+async function analyzeReputation(
+  supplierName: string, 
+  consumerResults: any[], 
+  redditResults: any[], 
+  negativeNewsResults: any[], 
+  regulatoryResults: any[]
+): Promise<ReputationScore> {
+  const issues: ReputationIssue[] = [];
+  
+  // Negative keywords for sentiment detection
+  const severeKeywords = ['lawsuit', 'fraud', 'scandal', 'recall', 'death', 'injury', 'criminal', 'violation', 'fine', 'penalty', 'banned', 'shutdown'];
+  const moderateKeywords = ['complaint', 'problem', 'issue', 'warning', 'concern', 'investigation', 'audit', 'dispute', 'criticism', 'controversy'];
+  const minorKeywords = ['delay', 'late', 'slow', 'disappointed', 'frustrating', 'annoying'];
+
+  const detectSeverity = (text: string): 'minor' | 'moderate' | 'severe' => {
+    const lower = text.toLowerCase();
+    if (severeKeywords.some(k => lower.includes(k))) return 'severe';
+    if (moderateKeywords.some(k => lower.includes(k))) return 'moderate';
+    return 'minor';
+  };
+
+  // Process consumer feedback
+  consumerResults.slice(0, 5).forEach(r => {
+    const text = `${r.title} ${r.description || ''}`;
+    const severity = detectSeverity(text);
+    if (severity !== 'minor' || text.toLowerCase().includes('complaint') || text.toLowerCase().includes('review')) {
+      issues.push({
+        source: new URL(r.url).hostname.replace('www.', ''),
+        type: 'consumer',
+        severity,
+        title: r.title,
+        snippet: r.description || '',
+        url: r.url,
+        date: r.age || 'Recent'
+      });
+    }
+  });
+
+  // Process Reddit discussions
+  redditResults.slice(0, 5).forEach(r => {
+    const text = `${r.title} ${r.description || ''}`;
+    const severity = detectSeverity(text);
+    issues.push({
+      source: 'Reddit',
+      type: 'reddit',
+      severity,
+      title: r.title,
+      snippet: r.description || '',
+      url: r.url,
+      date: r.age || 'Recent'
+    });
+  });
+
+  // Process negative news
+  negativeNewsResults.slice(0, 5).forEach(r => {
+    const text = `${r.title} ${r.description || ''}`;
+    const severity = detectSeverity(text);
+    if (severity !== 'minor') {
+      issues.push({
+        source: new URL(r.url).hostname.replace('www.', ''),
+        type: 'news',
+        severity,
+        title: r.title,
+        snippet: r.description || '',
+        url: r.url,
+        date: r.age || 'Recent'
+      });
+    }
+  });
+
+  // Process regulatory issues
+  regulatoryResults.slice(0, 5).forEach(r => {
+    const text = `${r.title} ${r.description || ''}`;
+    const severity = detectSeverity(text);
+    issues.push({
+      source: new URL(r.url).hostname.replace('www.', ''),
+      type: 'regulatory',
+      severity,
+      title: r.title,
+      snippet: r.description || '',
+      url: r.url,
+      date: r.age || 'Recent'
+    });
+  });
+
+  // Calculate scores based on issues found
+  const calculateScore = (issueList: ReputationIssue[], baseScore: number = 85): number => {
+    let score = baseScore;
+    issueList.forEach(issue => {
+      if (issue.severity === 'severe') score -= 15;
+      else if (issue.severity === 'moderate') score -= 8;
+      else score -= 3;
+    });
+    return Math.max(0, Math.min(100, score));
+  };
+
+  const consumerIssues = issues.filter(i => i.type === 'consumer');
+  const redditIssues = issues.filter(i => i.type === 'reddit');
+  const newsIssues = issues.filter(i => i.type === 'news');
+  const regIssues = issues.filter(i => i.type === 'regulatory');
+
+  const consumerSentiment = calculateScore(consumerIssues, consumerResults.length > 0 ? 80 : 75);
+  const socialMediaSentiment = calculateScore(redditIssues, redditResults.length > 0 ? 80 : 75);
+  const mediaSentiment = calculateScore(newsIssues, negativeNewsResults.length > 0 ? 85 : 80);
+  const regulatoryCompliance = calculateScore(regIssues, regulatoryResults.length > 0 ? 90 : 85);
+
+  const severeCount = issues.filter(i => i.severity === 'severe').length;
+  const moderateCount = issues.filter(i => i.severity === 'moderate').length;
+  
+  // Overall is weighted average
+  const overall = Math.round(
+    consumerSentiment * 0.25 +
+    socialMediaSentiment * 0.20 +
+    mediaSentiment * 0.30 +
+    regulatoryCompliance * 0.25
+  );
+
+  // Generate summary
+  let summary = '';
+  if (severeCount > 0) {
+    summary = `⚠️ CAUTION: Found ${severeCount} severe issue(s) requiring immediate attention. `;
+  }
+  if (moderateCount > 0) {
+    summary += `${moderateCount} moderate concern(s) identified. `;
+  }
+  if (severeCount === 0 && moderateCount === 0) {
+    summary = 'No major reputation concerns found in the past 24 months. ';
+  }
+  summary += `Overall reputation score: ${overall}/100.`;
+
+  return {
+    overall,
+    consumerSentiment,
+    socialMediaSentiment,
+    mediaSentiment,
+    regulatoryCompliance,
+    issues: issues.slice(0, 10), // Keep top 10 issues
+    summary
+  };
+}
+
 function extractNews(searchResults: any[]): NewsItem[] {
   return searchResults
     .filter(r => r.title && r.url)
@@ -321,18 +483,34 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Search for company info
-    const [companyResults, newsResults, riskResults] = await Promise.all([
+    // Search for company info + reputation data
+    const [
+      companyResults, 
+      newsResults, 
+      riskResults,
+      consumerResults,
+      redditResults,
+      negativeNewsResults,
+      regulatoryResults
+    ] = await Promise.all([
       searchBrave(`${supplier} company profile overview`),
       searchBrave(`${supplier} news 2024 2025`),
       searchBrave(`${supplier} supply chain risk issues`),
+      // Reputation searches
+      searchBrave(`"${supplier}" reviews complaints consumer feedback`),
+      searchBrave(`site:reddit.com "${supplier}" problems issues experience`),
+      searchBrave(`"${supplier}" scandal controversy lawsuit problem -site:reddit.com`),
+      searchBrave(`"${supplier}" FDA warning EPA violation regulatory fine citation recall`),
     ]);
 
     // Combine all search results for AI analysis
     const allResults = [...companyResults, ...newsResults, ...riskResults];
 
-    // Get AI analysis
-    const aiAnalysis = await analyzeWithAI(supplier, allResults);
+    // Get AI analysis and reputation score in parallel
+    const [aiAnalysis, reputation] = await Promise.all([
+      analyzeWithAI(supplier, allResults),
+      analyzeReputation(supplier, consumerResults, redditResults, negativeNewsResults, regulatoryResults)
+    ]);
 
     // Extract news items
     const news = extractNews(newsResults);
@@ -359,6 +537,7 @@ export async function GET(request: NextRequest) {
       certifications: aiAnalysis.certifications || [],
       recentDevelopments: aiAnalysis.recentDevelopments || [],
       aiAnalysis: aiAnalysis.aiAnalysis || '',
+      reputation: reputation,
     };
 
     return NextResponse.json(intel);
