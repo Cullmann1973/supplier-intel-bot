@@ -73,10 +73,12 @@ async function searchBrave(query: string): Promise<any[]> {
 }
 
 async function analyzeWithOllama(supplierName: string, prompt: string): Promise<Partial<SupplierIntel> | null> {
-  // Try local Ollama on Windows PC
+  // Ollama URLs - check for tunnel URL first (for Vercel deployment)
+  const tunnelUrl = process.env.OLLAMA_URL;
   const ollamaUrls = [
-    'http://192.168.50.1:11434',  // Windows PC
-    'http://localhost:11434',     // Local Mac
+    ...(tunnelUrl ? [tunnelUrl] : []),  // Cloudflare tunnel (production)
+    'http://192.168.50.1:11434',        // Windows PC (local dev)
+    'http://localhost:11434',           // Local Mac (local dev)
   ];
   
   for (const baseUrl of ollamaUrls) {
