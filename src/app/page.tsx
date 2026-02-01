@@ -1,19 +1,40 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe } from 'lucide-react';
+import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe, Clock, X } from 'lucide-react';
 
 export default function Home() {
   const [supplierName, setSupplierName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const router = useRouter();
+
+  useEffect(() => {
+    // Load recent searches from localStorage
+    const stored = localStorage.getItem('recentSupplierSearches');
+    if (stored) {
+      setRecentSearches(JSON.parse(stored));
+    }
+  }, []);
+
+  const saveSearch = (name: string) => {
+    const updated = [name, ...recentSearches.filter(s => s !== name)].slice(0, 5);
+    setRecentSearches(updated);
+    localStorage.setItem('recentSupplierSearches', JSON.stringify(updated));
+  };
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    localStorage.removeItem('recentSupplierSearches');
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierName.trim()) return;
     
     setIsLoading(true);
+    saveSearch(supplierName.trim());
     router.push(`/intel?supplier=${encodeURIComponent(supplierName.trim())}`);
   };
 
@@ -76,7 +97,7 @@ export default function Home() {
           </form>
 
           {/* Quick Demo Links */}
-          <div className="flex flex-wrap justify-center gap-2 mb-16">
+          <div className="flex flex-wrap justify-center gap-2 mb-8">
             <span className="text-slate-400 text-sm">Try:</span>
             {demoSuppliers.map((supplier) => (
               <button
@@ -88,6 +109,33 @@ export default function Home() {
               </button>
             ))}
           </div>
+
+          {/* Recent Searches */}
+          {recentSearches.length > 0 && (
+            <div className="flex flex-wrap justify-center items-center gap-2 mb-16">
+              <Clock className="w-4 h-4 text-slate-500" />
+              <span className="text-slate-500 text-sm">Recent:</span>
+              {recentSearches.map((search) => (
+                <button
+                  key={search}
+                  onClick={() => {
+                    setSupplierName(search);
+                    router.push(`/intel?supplier=${encodeURIComponent(search)}`);
+                  }}
+                  className="px-3 py-1 text-sm text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-full transition-colors"
+                >
+                  {search}
+                </button>
+              ))}
+              <button
+                onClick={clearRecentSearches}
+                className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                title="Clear recent searches"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Features Grid */}
           <div className="grid md:grid-cols-4 gap-6 text-left">
