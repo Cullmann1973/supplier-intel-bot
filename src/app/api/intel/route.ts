@@ -169,42 +169,78 @@ Provide your analysis in this exact JSON format (no markdown, just raw JSON):
 
 Be specific and factual where possible. For unknown companies, make reasonable inferences based on the name and any available context. Always provide complete JSON.`;
 
-  console.log('Calling OpenAI for analysis...');
-  
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 1500,
-      }),
-    });
+  // Try Anthropic first if available
+  if (anthropicKey) {
+    console.log('Calling Anthropic for analysis...');
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-haiku-20241022',
+          max_tokens: 2000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      const content = data.choices[0]?.message?.content || '';
-      console.log('OpenAI response received, parsing...');
-      
-      // Try to parse JSON from the response
-      try {
-        // Clean up potential markdown formatting
-        const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
-        return JSON.parse(jsonStr);
-      } catch (parseError) {
-        console.error('Failed to parse AI response as JSON:', parseError);
-        console.log('Raw content:', content.substring(0, 200));
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.content?.[0]?.text || '';
+        console.log('Anthropic response received, parsing...');
+        
+        try {
+          const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
+          return JSON.parse(jsonStr);
+        } catch (parseError) {
+          console.error('Failed to parse Anthropic response as JSON:', parseError);
+        }
+      } else {
+        console.error('Anthropic response not OK:', response.status);
       }
-    } else {
-      console.error('OpenAI response not OK:', response.status, await response.text());
+    } catch (error) {
+      console.error('Anthropic API error:', error);
     }
-  } catch (error) {
-    console.error('OpenAI API error:', error);
+  }
+
+  // Try OpenAI as fallback
+  if (openaiKey) {
+    console.log('Calling OpenAI for analysis...');
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 1500,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices[0]?.message?.content || '';
+        console.log('OpenAI response received, parsing...');
+        
+        try {
+          const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
+          return JSON.parse(jsonStr);
+        } catch (parseError) {
+          console.error('Failed to parse OpenAI response as JSON:', parseError);
+        }
+      } else {
+        console.error('OpenAI response not OK:', response.status);
+      }
+    } catch (error) {
+      console.error('OpenAI API error:', error);
+    }
   }
 
   // Try Ollama as fallback
