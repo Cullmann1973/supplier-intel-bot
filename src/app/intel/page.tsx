@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -29,6 +29,8 @@ import {
   Gavel,
   ThumbsUp,
   ThumbsDown,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface NewsItem {
@@ -100,6 +102,7 @@ function IntelContent() {
   const [intel, setIntel] = useState<SupplierIntel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reputationExpanded, setReputationExpanded] = useState(false);
 
   useEffect(() => {
     if (!supplier) {
@@ -204,7 +207,8 @@ function IntelContent() {
             intel.reputation.overall >= 60 ? 'bg-yellow-900/20 border-yellow-700/50' :
             'bg-red-900/20 border-red-700/50'
           }`}>
-            <div className="flex items-start justify-between mb-6">
+            {/* Highlights - Always Visible */}
+            <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className={`p-3 rounded-lg ${
                   intel.reputation.overall >= 80 ? 'bg-green-600' :
@@ -215,7 +219,7 @@ function IntelContent() {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white">Reputation Score</h3>
-                  <p className="text-sm text-slate-400">Based on consumer feedback, Reddit, news & regulatory data</p>
+                  <p className="text-sm text-slate-400">Consumer, Reddit, news & regulatory analysis</p>
                 </div>
               </div>
               <div className="text-right">
@@ -230,31 +234,7 @@ function IntelContent() {
               </div>
             </div>
 
-            {/* Score Breakdown */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <ReputationBar 
-                icon={<ThumbsUp className="w-4 h-4" />} 
-                label="Consumer" 
-                score={intel.reputation.consumerSentiment} 
-              />
-              <ReputationBar 
-                icon={<MessageCircle className="w-4 h-4" />} 
-                label="Social Media" 
-                score={intel.reputation.socialMediaSentiment} 
-              />
-              <ReputationBar 
-                icon={<Newspaper className="w-4 h-4" />} 
-                label="Media" 
-                score={intel.reputation.mediaSentiment} 
-              />
-              <ReputationBar 
-                icon={<Gavel className="w-4 h-4" />} 
-                label="Regulatory" 
-                score={intel.reputation.regulatoryCompliance} 
-              />
-            </div>
-
-            {/* Summary */}
+            {/* Summary - Always Visible */}
             <p className={`text-sm mb-4 ${
               intel.reputation.overall >= 80 ? 'text-green-300' :
               intel.reputation.overall >= 60 ? 'text-yellow-300' :
@@ -263,18 +243,74 @@ function IntelContent() {
               {intel.reputation.summary}
             </p>
 
-            {/* Issues List */}
-            {intel.reputation.issues.length > 0 && (
-              <div className="mt-4">
-                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                  <FileWarning className="w-4 h-4" />
-                  Issues Found ({intel.reputation.issues.length})
-                </h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {intel.reputation.issues.map((issue, i) => (
-                    <ReputationIssueCard key={i} issue={issue} />
-                  ))}
+            {/* Expand/Collapse Button */}
+            <button
+              onClick={() => setReputationExpanded(!reputationExpanded)}
+              onDoubleClick={() => setReputationExpanded(!reputationExpanded)}
+              className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg text-sm text-slate-300 hover:text-white transition-colors border border-slate-600/30"
+            >
+              {reputationExpanded ? (
+                <>
+                  <ChevronUp className="w-4 h-4" />
+                  Hide Details
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4" />
+                  View Details ({intel.reputation.issues.length} issues found)
+                </>
+              )}
+            </button>
+
+            {/* Expandable Details */}
+            {reputationExpanded && (
+              <div className="mt-6 pt-6 border-t border-slate-700/50 animate-in slide-in-from-top-2 duration-200">
+                {/* Score Breakdown */}
+                <h4 className="text-sm font-semibold text-slate-300 mb-3">Score Breakdown</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <ReputationBar 
+                    icon={<ThumbsUp className="w-4 h-4" />} 
+                    label="Consumer" 
+                    score={intel.reputation.consumerSentiment} 
+                  />
+                  <ReputationBar 
+                    icon={<MessageCircle className="w-4 h-4" />} 
+                    label="Social Media" 
+                    score={intel.reputation.socialMediaSentiment} 
+                  />
+                  <ReputationBar 
+                    icon={<Newspaper className="w-4 h-4" />} 
+                    label="Media" 
+                    score={intel.reputation.mediaSentiment} 
+                  />
+                  <ReputationBar 
+                    icon={<Gavel className="w-4 h-4" />} 
+                    label="Regulatory" 
+                    score={intel.reputation.regulatoryCompliance} 
+                  />
                 </div>
+
+                {/* Issues List */}
+                {intel.reputation.issues.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                      <FileWarning className="w-4 h-4" />
+                      Issues Found ({intel.reputation.issues.length})
+                    </h4>
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {intel.reputation.issues.map((issue, i) => (
+                        <ReputationIssueCard key={i} issue={issue} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {intel.reputation.issues.length === 0 && (
+                  <div className="text-center py-4 text-slate-400">
+                    <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
+                    <p>No significant issues found in recent searches</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
