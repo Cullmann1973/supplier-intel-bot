@@ -33,6 +33,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import SupplierChat from '../components/SupplierChat';
 
 interface NewsItem {
   title: string;
@@ -493,6 +494,40 @@ function IntelContent() {
           </p>
         </div>
       </footer>
+
+      {/* AI Chat */}
+      <SupplierChat 
+        supplierName={intel.company}
+        supplierContext={`
+Company: ${intel.company}
+Industry: ${intel.industry}
+Headquarters: ${intel.headquarters}
+Employees: ${intel.employees}
+Revenue: ${intel.revenue}
+Founded: ${intel.founded}
+Website: ${intel.website}
+
+Summary: ${intel.summary}
+
+Supply Chain Role: ${intel.supplyChainRole}
+Competitive Position: ${intel.competitivePosition}
+
+Certifications: ${intel.certifications?.join(', ') || 'None listed'}
+
+Risk Factors:
+${intel.risks?.map(r => `- ${r.category} (${r.level}): ${r.description}`).join('\n') || 'None identified'}
+
+ESG Scores:
+- Environmental: ${intel.esgScore?.environmental || 'N/A'}
+- Social: ${intel.esgScore?.social || 'N/A'}
+- Governance: ${intel.esgScore?.governance || 'N/A'}
+
+Recent Developments:
+${intel.recentDevelopments?.map(d => `- ${d}`).join('\n') || 'None listed'}
+
+AI Analysis: ${intel.aiAnalysis}
+        `.trim()}
+      />
     </div>
   );
 }
