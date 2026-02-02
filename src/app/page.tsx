@@ -1,22 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe, Clock, X } from 'lucide-react';
+import { gsap } from 'gsap';
+import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe, Clock, X, Sparkles, ChevronRight } from 'lucide-react';
 
 export default function Home() {
   const [supplierName, setSupplierName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [isPageLoaded, setIsPageLoaded] = useState(false);
   const router = useRouter();
+  const mainRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load recent searches from localStorage
+    setIsPageLoaded(true);
     const stored = localStorage.getItem('recentSupplierSearches');
     if (stored) {
       setRecentSearches(JSON.parse(stored));
     }
   }, []);
+
+  useEffect(() => {
+    if (isPageLoaded && mainRef.current) {
+      gsap.fromTo(mainRef.current,
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }
+      );
+    }
+  }, [isPageLoaded]);
 
   const saveSearch = (name: string) => {
     const updated = [name, ...recentSearches.filter(s => s !== name)].slice(0, 5);
@@ -35,180 +47,203 @@ export default function Home() {
     
     setIsLoading(true);
     saveSearch(supplierName.trim());
-    router.push(`/intel?supplier=${encodeURIComponent(supplierName.trim())}`);
+    
+    // Animate out
+    if (mainRef.current) {
+      gsap.to(mainRef.current, {
+        opacity: 0,
+        x: -30,
+        duration: 0.3,
+        ease: 'power2.in',
+        onComplete: () => {
+          router.push(`/intel?supplier=${encodeURIComponent(supplierName.trim())}`);
+        }
+      });
+    } else {
+      router.push(`/intel?supplier=${encodeURIComponent(supplierName.trim())}`);
+    }
   };
 
   const demoSuppliers = [
-    'BASF SE',
-    'Dow Chemical',
-    'Honeywell',
-    'Siemens AG',
-    '3M Company'
+    { name: 'BASF SE', industry: 'Chemicals' },
+    { name: 'Honeywell', industry: 'Industrial' },
+    { name: 'Siemens AG', industry: 'Technology' },
+    { name: '3M Company', industry: 'Manufacturing' },
+  ];
+
+  const features = [
+    { icon: Globe, label: 'Web Intelligence', desc: 'Real-time news & data' },
+    { icon: TrendingUp, label: 'Financial Health', desc: 'Revenue & growth analysis' },
+    { icon: AlertTriangle, label: 'Risk Assessment', desc: 'AI-powered risk scoring' },
+    { icon: Shield, label: 'Compliance', desc: 'ESG & regulatory status' },
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-[var(--bg-primary)] relative">
+      {/* Background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-[var(--si-blue)]/[0.03] rounded-full blur-[100px]" />
+      </div>
+
       {/* Header */}
-      <header className="border-b border-slate-700/50 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <header className="nav-header">
+        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Building2 className="w-6 h-6 text-white" />
+            <div className="p-2 bg-gradient-to-br from-[var(--si-blue)] to-[var(--si-blue-dark)] rounded-xl">
+              <Building2 className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">Supplier Intel</h1>
-              <p className="text-xs text-slate-400">AI-Powered Supply Chain Intelligence</p>
+              <h1 className="text-lg font-bold text-white">Supplier Intel</h1>
             </div>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-tertiary)]">
+            <Sparkles className="w-3 h-3 text-[var(--si-blue)]" />
+            <span className="text-[11px] text-[var(--text-tertiary)]">AI-Powered</span>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center max-w-3xl mx-auto">
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
+      {/* Main Content */}
+      <main ref={mainRef} className="pt-20 pb-8 px-4 max-w-4xl mx-auto" style={{ opacity: 0 }}>
+        {/* Hero */}
+        <div className="text-center mb-10 pt-8">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 tracking-tight">
             Know Your Suppliers
-            <span className="block text-blue-400">Before They Know You</span>
+            <span className="block text-[var(--si-blue)]">Before They Know You</span>
           </h2>
-          <p className="text-lg text-slate-300 mb-10">
-            Instant intelligence on any supplier. Financial health, news, risks, and opportunities - 
-            all analyzed by AI in seconds.
+          <p className="text-[var(--text-secondary)] text-base max-w-lg mx-auto">
+            Instant intelligence on any supplier. Financial health, news, risks, and reputation - analyzed by AI.
           </p>
+        </div>
 
-          {/* Search Form */}
-          <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                placeholder="Enter supplier name (e.g., BASF, Honeywell, Siemens)"
-                className="w-full pl-12 pr-32 py-4 bg-slate-800/50 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
-              />
-              <button
-                type="submit"
-                disabled={isLoading || !supplierName.trim()}
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
-              >
-                {isLoading ? 'Analyzing...' : 'Get Intel'}
-              </button>
+        {/* Search Form */}
+        <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-10">
+          <div className="input-container flex gap-2 p-2">
+            <div className="flex items-center pl-3">
+              <Search className="w-5 h-5 text-[var(--text-quaternary)]" />
             </div>
-          </form>
+            <input
+              type="text"
+              value={supplierName}
+              onChange={(e) => setSupplierName(e.target.value)}
+              placeholder="Enter supplier name (e.g., BASF, Honeywell)"
+              className="input-field flex-1 py-3"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !supplierName.trim()}
+              className="btn-primary px-6 py-3"
+            >
+              {isLoading ? 'Analyzing...' : 'Get Intel'}
+            </button>
+          </div>
+        </form>
 
-          {/* Quick Demo Links */}
-          <div className="flex flex-wrap justify-center gap-2 mb-8">
-            <span className="text-slate-400 text-sm">Try:</span>
+        {/* Demo Suppliers */}
+        <div className="mb-10">
+          <p className="text-center text-sm text-[var(--text-tertiary)] mb-4">Try a demo supplier:</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto">
             {demoSuppliers.map((supplier) => (
               <button
-                key={supplier}
-                onClick={() => setSupplierName(supplier)}
-                className="px-3 py-1 text-sm text-blue-400 hover:text-blue-300 hover:bg-slate-800 rounded-full transition-colors"
+                key={supplier.name}
+                onClick={() => {
+                  setSupplierName(supplier.name);
+                  saveSearch(supplier.name);
+                  if (mainRef.current) {
+                    gsap.to(mainRef.current, {
+                      opacity: 0,
+                      x: -30,
+                      duration: 0.3,
+                      ease: 'power2.in',
+                      onComplete: () => {
+                        router.push(`/intel?supplier=${encodeURIComponent(supplier.name)}`);
+                      }
+                    });
+                  }
+                }}
+                className="card card-interactive p-3 text-left group"
               >
-                {supplier}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-white text-sm">{supplier.name}</div>
+                    <div className="text-xs text-[var(--text-tertiary)]">{supplier.industry}</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-[var(--text-quaternary)] group-hover:text-[var(--si-blue)] group-hover:translate-x-1 transition-all" />
+                </div>
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Recent Searches */}
-          {recentSearches.length > 0 && (
-            <div className="flex flex-wrap justify-center items-center gap-2 mb-16">
-              <Clock className="w-4 h-4 text-slate-500" />
-              <span className="text-slate-500 text-sm">Recent:</span>
+        {/* Recent Searches */}
+        {recentSearches.length > 0 && (
+          <div className="max-w-2xl mx-auto mb-10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
+                <Clock className="w-4 h-4" />
+                <span>Recent searches</span>
+              </div>
+              <button
+                onClick={clearRecentSearches}
+                className="text-xs text-[var(--text-quaternary)] hover:text-[var(--si-blue)] transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
               {recentSearches.map((search) => (
                 <button
                   key={search}
                   onClick={() => {
                     setSupplierName(search);
-                    router.push(`/intel?supplier=${encodeURIComponent(search)}`);
+                    if (mainRef.current) {
+                      gsap.to(mainRef.current, {
+                        opacity: 0,
+                        x: -30,
+                        duration: 0.3,
+                        ease: 'power2.in',
+                        onComplete: () => {
+                          router.push(`/intel?supplier=${encodeURIComponent(search)}`);
+                        }
+                      });
+                    }
                   }}
-                  className="px-3 py-1 text-sm text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700 rounded-full transition-colors"
+                  className="px-3 py-1.5 text-sm bg-[var(--bg-tertiary)] hover:bg-[var(--bg-elevated)] border border-[var(--glass-border)] rounded-full text-[var(--text-secondary)] transition-colors"
                 >
                   {search}
                 </button>
               ))}
-              <button
-                onClick={clearRecentSearches}
-                className="p-1 text-slate-500 hover:text-red-400 transition-colors"
-                title="Clear recent searches"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
-          )}
-
-          {/* Features Grid */}
-          <div className="grid md:grid-cols-4 gap-6 text-left">
-            <FeatureCard
-              icon={<Globe className="w-6 h-6" />}
-              title="Web Intelligence"
-              description="Aggregates news, press releases, and public data in real-time"
-            />
-            <FeatureCard
-              icon={<TrendingUp className="w-6 h-6" />}
-              title="Financial Health"
-              description="Revenue trends, market position, and growth indicators"
-            />
-            <FeatureCard
-              icon={<AlertTriangle className="w-6 h-6" />}
-              title="Risk Assessment"
-              description="AI-powered analysis of supply chain and operational risks"
-            />
-            <FeatureCard
-              icon={<Shield className="w-6 h-6" />}
-              title="Compliance Check"
-              description="ESG, regulatory, and quality certification status"
-            />
           </div>
-        </div>
+        )}
 
-        {/* Use Cases */}
-        <div className="mt-24 max-w-4xl mx-auto">
-          <h3 className="text-2xl font-bold text-white text-center mb-10">Built for Supply Chain Leaders</h3>
-          <div className="grid md:grid-cols-3 gap-8">
-            <UseCase
-              title="Vendor Qualification"
-              description="Screen new suppliers before onboarding with comprehensive intelligence reports"
-            />
-            <UseCase
-              title="Risk Monitoring"
-              description="Stay ahead of supply disruptions with real-time alerts and trend analysis"
-            />
-            <UseCase
-              title="Strategic Sourcing"
-              description="Make data-driven decisions with competitive landscape insights"
-            />
+        {/* Features */}
+        <div className="card p-6 max-w-2xl mx-auto">
+          <h3 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider mb-4">
+            What You'll Get
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            {features.map((feature) => (
+              <div key={feature.label} className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-[var(--si-blue)]/10">
+                  <feature.icon className="w-4 h-4 text-[var(--si-blue)]" />
+                </div>
+                <div>
+                  <div className="font-medium text-white text-sm">{feature.label}</div>
+                  <div className="text-xs text-[var(--text-tertiary)]">{feature.desc}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-700/50 py-8 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-slate-400 text-sm">
-            Supplier Intel Demo • Built with AI for Supply Chain Excellence
-          </p>
+      <footer className="border-t border-[var(--glass-border)] py-4 bg-[var(--bg-primary)]">
+        <div className="max-w-4xl mx-auto px-4 text-center text-[11px] text-[var(--text-quaternary)]">
+          Supplier Intel Demo • AI-Powered Supply Chain Intelligence
         </div>
       </footer>
-    </div>
-  );
-}
-
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-  return (
-    <div className="p-6 bg-slate-800/30 border border-slate-700/50 rounded-xl">
-      <div className="text-blue-400 mb-3">{icon}</div>
-      <h4 className="text-white font-semibold mb-2">{title}</h4>
-      <p className="text-slate-400 text-sm">{description}</p>
-    </div>
-  );
-}
-
-function UseCase({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="text-center">
-      <h4 className="text-white font-semibold mb-2">{title}</h4>
-      <p className="text-slate-400 text-sm">{description}</p>
     </div>
   );
 }
