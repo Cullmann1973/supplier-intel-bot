@@ -59,6 +59,7 @@ export default function SupplierChat({ supplierName, supplierContext }: Supplier
         body: JSON.stringify({
           message: text,
           supplierContext,
+          supplierName,
           history: messages,
         }),
       });

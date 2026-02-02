@@ -5,9 +5,61 @@ interface ChatMessage {
   content: string;
 }
 
+// Web search function using Brave API
+async function searchWeb(query: string): Promise<string> {
+  const braveKey = process.env.BRAVE_API_KEY;
+  if (!braveKey) {
+    return '';
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'X-Subscription-Token': braveKey,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Brave search failed:', response.status);
+      return '';
+    }
+
+    const data = await response.json();
+    const results = data.web?.results || [];
+    
+    if (results.length === 0) return '';
+
+    // Format search results
+    return results
+      .slice(0, 5)
+      .map((r: any) => `- ${r.title}: ${r.description || ''} (Source: ${r.url})`)
+      .join('\n');
+  } catch (error) {
+    console.error('Web search error:', error);
+    return '';
+  }
+}
+
+// Detect if question needs web search
+function needsWebSearch(message: string): boolean {
+  const searchTriggers = [
+    'fda', 'epa', 'osha', 'warning', 'recall', 'inspection', 'lawsuit', 'lawsuit',
+    'recent', 'latest', 'news', 'current', 'today', '2024', '2025', '2026',
+    'plant', 'factory', 'location', 'facility', 'manufacture',
+    'competitor', 'acquisition', 'merger', 'bankruptcy', 'financial',
+    'certification', 'iso', 'audit', 'violation', 'fine', 'penalty'
+  ];
+  const lower = message.toLowerCase();
+  return searchTriggers.some(trigger => lower.includes(trigger));
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { message, supplierContext, history } = await request.json();
+    const { message, supplierContext, history, supplierName } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message required' }, { status: 400 });
@@ -18,19 +70,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI service not configured' }, { status: 500 });
     }
 
-    // Build the system prompt with supplier context
+    // Perform web search if needed
+    let webSearchResults = '';
+    if (needsWebSearch(message) && supplierName) {
+      console.log('Performing web search for:', message);
+      const searchQuery = `${supplierName} ${message}`;
+      webSearchResults = await searchWeb(searchQuery);
+      if (webSearchResults) {
+        console.log('Web search returned results');
+      }
+    }
+
+    // Build the system prompt with supplier context and web results
     const systemPrompt = `You are a supply chain intelligence assistant helping analyze suppliers. 
 You have access to the following supplier information:
 
 ${supplierContext || 'No specific supplier context provided.'}
 
-Answer questions about this supplier based on:
-1. The provided context above
-2. Your general knowledge about the company and industry
-3. Common supply chain and procurement concerns
+${webSearchResults ? `
+RECENT WEB SEARCH RESULTS for "${message}":
+${webSearchResults}
 
-Be concise, factual, and helpful. If you don't have specific information, say so and provide general guidance.
-For regulatory questions (FDA, EPA, etc.), mention that the user should verify with official sources.`;
+Use these search results to provide current, accurate information. Always cite the source when using information from search results.
+` : ''}
+
+Answer questions about this supplier based on:
+1. The web search results above (if available) - prioritize this for current information
+2. The provided supplier context
+3. Your general knowledge about the company and industry
+
+Be concise, factual, and helpful. When citing web search results, mention the source.
+If you don't have specific information and no search results are available, say so clearly.`;
 
     // Build messages array
     const messages: { role: string; content: string }[] = [
