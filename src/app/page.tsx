@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { gsap } from 'gsap';
-import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe, Clock, X, Sparkles, ChevronRight } from 'lucide-react';
+import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe, Clock, X, Sparkles, ChevronRight, Scale, ArrowRight } from 'lucide-react';
 
 export default function Home() {
   const [supplierName, setSupplierName] = useState('');
@@ -218,7 +218,7 @@ export default function Home() {
         )}
 
         {/* Features */}
-        <div className="card p-6 max-w-2xl mx-auto">
+        <div className="card p-6 max-w-2xl mx-auto mb-6">
           <h3 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider mb-4">
             What You'll Get
           </h3>
@@ -235,6 +235,25 @@ export default function Home() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Compare Feature */}
+        <div className="max-w-2xl mx-auto">
+          <button
+            onClick={() => router.push('/compare')}
+            className="w-full card card-interactive p-4 flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/20">
+                <Scale className="w-5 h-5 text-purple-400" />
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-white">Compare Suppliers</div>
+                <div className="text-sm text-[var(--text-tertiary)]">Side-by-side analysis of two suppliers</div>
+              </div>
+            </div>
+            <ArrowRight className="w-5 h-5 text-[var(--text-quaternary)] group-hover:text-purple-400 group-hover:translate-x-1 transition-all" />
+          </button>
         </div>
       </main>
 
