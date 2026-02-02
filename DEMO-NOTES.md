@@ -2,7 +2,7 @@
 
 ## Live Demo
 **Local:** http://localhost:3000  
-**Production:** (Deploy to Vercel for shareable link)
+**Production:** https://supplier-intel-bot.vercel.app
 
 ## Demo Flow
 
@@ -35,6 +35,16 @@ Walk through each section:
 ### 4. Actions
 - **Export PDF** - Clean print layout
 - **Share Link** - Copy URL to share
+
+### 5. Compare Suppliers (NEW)
+Navigate to Compare from home page:
+- Enter two suppliers side-by-side
+- **Demo comparisons:**
+  - BASF vs Dow (chemicals)
+  - Siemens vs Honeywell (industrial tech)
+- Visual checkmarks/X show winner per metric
+- Compare: ESG scores, reputation, risks, certifications, AI analysis
+- Great for vendor selection decisions
 
 ## Talking Points
 
@@ -96,10 +106,12 @@ Walk through each section:
 
 ## Future Enhancements (Roadmap)
 
-- [ ] Supplier comparison (side-by-side)
+- [x] Supplier comparison (side-by-side) ✅ Added 2026-02-02
 - [ ] Batch analysis (upload CSV)
 - [ ] Alerts/monitoring for supplier changes
 - [ ] Integration APIs (SAP, Oracle, Salesforce)
 - [ ] Custom risk models
 - [ ] Historical tracking
 - [ ] Team collaboration features
+- [ ] PDF export from comparison view
+- [ ] Save suppliers to watchlist
