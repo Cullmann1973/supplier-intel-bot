@@ -1,10 +1,30 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  // Try local Ollama endpoints
+  // Check for cloud AI providers first
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasGroq = !!process.env.GROQ_API_KEY;
+  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+
+  // If any cloud provider is configured, report as online
+  if (hasOpenAI || hasGroq || hasAnthropic) {
+    const providers = [];
+    if (hasGroq) providers.push('Groq');
+    if (hasOpenAI) providers.push('OpenAI');
+    if (hasAnthropic) providers.push('Anthropic');
+    
+    return NextResponse.json({
+      status: 'online',
+      provider: providers[0],
+      providers,
+      message: `AI powered by ${providers.join(', ')}`,
+    });
+  }
+
+  // Try local Ollama as fallback
   const ollamaUrls = [
-    'http://127.0.0.1:11434',  // Local Mac
-    'http://localhost:11434',  // Local Mac alternate
+    'http://127.0.0.1:11434',
+    'http://localhost:11434',
   ];
 
   for (const baseUrl of ollamaUrls) {
@@ -23,6 +43,7 @@ export async function GET() {
         const models = data.models?.map((m: any) => m.name) || [];
         return NextResponse.json({
           status: 'online',
+          provider: 'Ollama',
           url: baseUrl,
           models,
         });
@@ -34,6 +55,6 @@ export async function GET() {
 
   return NextResponse.json({
     status: 'offline',
-    message: 'Ollama not available. Start it with: ollama serve',
+    message: 'No AI service configured. Add OPENAI_API_KEY or GROQ_API_KEY.',
   });
 }

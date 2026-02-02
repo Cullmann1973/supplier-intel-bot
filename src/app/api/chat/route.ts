@@ -110,17 +110,130 @@ function needsWebSearch(message: string): boolean {
   return searchTriggers.some(trigger => lower.includes(trigger));
 }
 
+// Try multiple AI providers with fallback
+async function callAI(messages: { role: string; content: string }[]): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  
+  // Try Groq first (free tier available)
+  if (groqKey) {
+    try {
+      console.log('Trying Groq...');
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${groqKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages,
+          temperature: 0.7,
+          max_tokens: 1000,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const reply = data.choices[0]?.message?.content;
+        if (reply) {
+          console.log('Groq response successful');
+          return reply;
+        }
+      }
+    } catch (error) {
+      console.error('Groq error:', error);
+    }
+  }
+
+  // Try OpenAI as fallback
+  if (openaiKey) {
+    try {
+      console.log('Trying OpenAI...');
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+          temperature: 0.7,
+          max_tokens: 1000,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const reply = data.choices[0]?.message?.content;
+        if (reply) {
+          console.log('OpenAI response successful');
+          return reply;
+        }
+      }
+    } catch (error) {
+      console.error('OpenAI error:', error);
+    }
+  }
+
+  // Try local Ollama as final fallback (free)
+  const ollamaUrls = ['http://127.0.0.1:11434', 'http://localhost:11434'];
+  for (const baseUrl of ollamaUrls) {
+    try {
+      console.log(`Trying Ollama at ${baseUrl}...`);
+      
+      // Check available models
+      const tagsRes = await fetch(`${baseUrl}/api/tags`, { 
+        signal: AbortSignal.timeout(3000) 
+      });
+      if (!tagsRes.ok) continue;
+      
+      const tagsData = await tagsRes.json();
+      const models = tagsData.models?.map((m: any) => m.name) || [];
+      const model = models.find((m: string) => m.includes('qwen') || m.includes('llama')) || models[0];
+      if (!model) continue;
+
+      // Convert messages to single prompt for Ollama
+      const prompt = messages.map(m => 
+        m.role === 'system' ? `System: ${m.content}` : 
+        m.role === 'user' ? `User: ${m.content}` : 
+        `Assistant: ${m.content}`
+      ).join('\n\n') + '\n\nAssistant:';
+
+      const response = await fetch(`${baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt,
+          stream: false,
+          options: { temperature: 0.7, num_predict: 1000 }
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.response) {
+          console.log('Ollama response successful');
+          return data.response;
+        }
+      }
+    } catch (error) {
+      console.log(`Ollama at ${baseUrl} not available`);
+    }
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { message, supplierContext, history, supplierName } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message required' }, { status: 400 });
-    }
-
-    const groqKey = process.env.GROQ_API_KEY;
-    if (!groqKey) {
-      return NextResponse.json({ error: 'AI service not configured' }, { status: 500 });
     }
 
     // Perform web search if needed
@@ -171,29 +284,14 @@ If you don't have specific information and no search results are available, say 
     // Add current message
     messages.push({ role: 'user', content: message });
 
-    // Call Groq API
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${groqKey}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages,
-        temperature: 0.7,
-        max_tokens: 1000,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Groq API error:', error);
-      return NextResponse.json({ error: 'AI service error' }, { status: 500 });
+    // Call AI with fallbacks
+    const reply = await callAI(messages);
+    
+    if (!reply) {
+      return NextResponse.json({ 
+        error: 'No AI service available. Configure GROQ_API_KEY, OPENAI_API_KEY, or run Ollama locally.' 
+      }, { status: 500 });
     }
-
-    const data = await response.json();
-    const reply = data.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
 
     return NextResponse.json({ reply });
 
