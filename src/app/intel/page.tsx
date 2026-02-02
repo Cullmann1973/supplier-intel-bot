@@ -87,6 +87,9 @@ interface SupplierIntel {
     social: number;
     governance: number;
     overall: number;
+    source?: string;
+    confidence?: string;
+    riskLevel?: string;
   };
   competitivePosition: string;
   supplyChainRole: string;
@@ -415,6 +418,32 @@ function IntelContent() {
                   <span className="text-2xl font-bold text-white">{intel.esgScore.overall}</span>
                 </div>
                 <p className="text-slate-400 text-sm mt-2">Overall Score</p>
+                {/* ESG Source and Confidence */}
+                <div className="mt-2 space-y-1">
+                  {intel.esgScore.source && (
+                    <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                      intel.esgScore.source === 'ai-estimated' 
+                        ? 'bg-yellow-500/20 text-yellow-400' 
+                        : 'bg-green-500/20 text-green-400'
+                    }`}>
+                      {intel.esgScore.source === 'ai-estimated' ? '⚠️ AI Estimated' : `📊 ${intel.esgScore.source.toUpperCase()}`}
+                    </span>
+                  )}
+                  {intel.esgScore.riskLevel && (
+                    <p className={`text-xs ${
+                      intel.esgScore.riskLevel === 'Low' || intel.esgScore.riskLevel === 'Negligible' ? 'text-green-400' :
+                      intel.esgScore.riskLevel === 'Medium' ? 'text-yellow-400' :
+                      'text-red-400'
+                    }`}>
+                      Risk Level: {intel.esgScore.riskLevel}
+                    </p>
+                  )}
+                  {intel.esgScore.confidence && (
+                    <p className="text-xs text-slate-500">
+                      Confidence: {intel.esgScore.confidence}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="space-y-3">
                 <ESGBar icon={<Leaf className="w-4 h-4" />} label="Environmental" score={intel.esgScore.environmental} />

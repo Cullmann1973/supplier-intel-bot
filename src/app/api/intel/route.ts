@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getESGScore, analyzeReputationWithAI, searchEmployeeReviews } from './esg-reputation';
 
 // Types for our intel response
 interface NewsItem {
@@ -53,6 +54,9 @@ interface SupplierIntel {
     social: number;
     governance: number;
     overall: number;
+    source?: string;
+    confidence?: string;
+    riskLevel?: string;
   };
   competitivePosition: string;
   supplyChainRole: string;
@@ -702,6 +706,60 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Helper function to call AI (for passing to ESG/reputation modules)
+    const callAI = async (prompt: string): Promise<string | null> => {
+      const groqKey = process.env.GROQ_API_KEY;
+      const openaiKey = process.env.OPENAI_API_KEY;
+      
+      // Try Groq first
+      if (groqKey) {
+        try {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${groqKey}`,
+            },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.3,
+              max_tokens: 2000,
+            }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            return data.choices[0]?.message?.content || null;
+          }
+        } catch (e) { console.error('Groq error:', e); }
+      }
+      
+      // Fallback to OpenAI
+      if (openaiKey) {
+        try {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${openaiKey}`,
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.3,
+              max_tokens: 2000,
+            }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            return data.choices[0]?.message?.content || null;
+          }
+        } catch (e) { console.error('OpenAI error:', e); }
+      }
+      
+      return null;
+    };
+
     // Search for company info + reputation data
     // Use Google News RSS for news (FREE, no API key!)
     const [
@@ -711,7 +769,8 @@ export async function GET(request: NextRequest) {
       consumerResults,
       redditResults,
       negativeNewsResults,
-      regulatoryResults
+      regulatoryResults,
+      employeeResults
     ] = await Promise.all([
       searchBrave(`${supplier} company profile overview`),
       searchGoogleNews(`${supplier}`), // Google News RSS - FREE!
@@ -721,19 +780,46 @@ export async function GET(request: NextRequest) {
       searchBrave(`site:reddit.com "${supplier}" problems issues experience`),
       searchBrave(`"${supplier}" scandal controversy lawsuit problem -site:reddit.com`),
       searchBrave(`"${supplier}" FDA warning EPA violation regulatory fine citation recall`),
+      searchEmployeeReviews(supplier), // Glassdoor/employee reviews
     ]);
 
     // Combine all search results for AI analysis
     const allResults = [...companyResults, ...newsResults, ...riskResults];
 
-    // Get AI analysis and reputation score in parallel
-    const [aiAnalysis, reputation] = await Promise.all([
+    // Get AI analysis, ESG score, and reputation in parallel
+    const [aiAnalysis, esgScore, aiReputation] = await Promise.all([
       analyzeWithAI(supplier, allResults),
-      analyzeReputation(supplier, consumerResults, redditResults, negativeNewsResults, regulatoryResults)
+      getESGScore(supplier, allResults, callAI), // NEW: Real ESG data search
+      analyzeReputationWithAI(supplier, {
+        consumer: consumerResults,
+        social: redditResults,
+        news: negativeNewsResults,
+        regulatory: regulatoryResults,
+        glassdoor: employeeResults,
+      }, callAI), // NEW: AI-powered reputation analysis
     ]);
 
     // Extract news items
     const news = extractNews(newsResults);
+
+    // Convert AI reputation to legacy format for compatibility
+    const reputation: ReputationScore = {
+      overall: aiReputation.overall,
+      consumerSentiment: aiReputation.breakdown.consumerSentiment,
+      socialMediaSentiment: aiReputation.breakdown.employeeSentiment,
+      mediaSentiment: aiReputation.breakdown.mediaSentiment,
+      regulatoryCompliance: aiReputation.breakdown.regulatoryCompliance,
+      issues: aiReputation.issues.map(i => ({
+        source: i.source,
+        type: i.type as any,
+        severity: i.severity,
+        title: i.title,
+        snippet: i.snippet + (i.aiAnalysis ? ` [AI Analysis: ${i.aiAnalysis}]` : ''),
+        url: i.url,
+        date: i.date,
+      })),
+      summary: aiReputation.summary + ` (${aiReputation.methodology})`,
+    };
 
     // Combine everything into the final response
     const intel: SupplierIntel = {
@@ -751,7 +837,16 @@ export async function GET(request: NextRequest) {
       ],
       risks: aiAnalysis.risks || [],
       opportunities: aiAnalysis.opportunities || [],
-      esgScore: aiAnalysis.esgScore || { environmental: 0, social: 0, governance: 0, overall: 0 },
+      // Use NEW ESG score with source info
+      esgScore: {
+        environmental: esgScore.environmental,
+        social: esgScore.social,
+        governance: esgScore.governance,
+        overall: esgScore.overall,
+        source: esgScore.source,
+        confidence: esgScore.confidence,
+        riskLevel: esgScore.riskLevel,
+      },
       competitivePosition: aiAnalysis.competitivePosition || '',
       supplyChainRole: aiAnalysis.supplyChainRole || '',
       certifications: aiAnalysis.certifications || [],
