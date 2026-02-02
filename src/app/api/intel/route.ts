@@ -62,35 +62,113 @@ interface SupplierIntel {
   reputation: ReputationScore;
 }
 
-async function searchBrave(query: string): Promise<any[]> {
-  const apiKey = process.env.BRAVE_API_KEY;
-  if (!apiKey) {
-    console.log('No Brave API key, using fallback data');
-    return [];
-  }
-
-  try {
-    const response = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=10`,
-      {
+async function searchWeb(query: string): Promise<any[]> {
+  // Try Serper.dev first (free tier available)
+  const serperKey = process.env.SERPER_API_KEY;
+  if (serperKey) {
+    try {
+      const response = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
         headers: {
-          'Accept': 'application/json',
-          'X-Subscription-Token': apiKey,
+          'X-API-KEY': serperKey,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ q: query, num: 10 }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const results = data.organic || [];
+        if (results.length > 0) {
+          console.log(`Serper returned ${results.length} results for: ${query}`);
+          return results.map((r: any) => ({
+            title: r.title,
+            url: r.link,
+            description: r.snippet,
+            age: r.date || 'Recent',
+          }));
+        }
       }
-    );
-
-    if (!response.ok) {
-      console.error('Brave search failed:', response.status);
-      return [];
+    } catch (error) {
+      console.error('Serper search error:', error);
     }
-
-    const data = await response.json();
-    return data.web?.results || [];
-  } catch (error) {
-    console.error('Brave search error:', error);
-    return [];
   }
+
+  // Try Brave API
+  const braveKey = process.env.BRAVE_API_KEY;
+  if (braveKey) {
+    try {
+      const response = await fetch(
+        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=10`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'X-Subscription-Token': braveKey,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const results = data.web?.results || [];
+        if (results.length > 0) {
+          console.log(`Brave returned ${results.length} results for: ${query}`);
+          return results;
+        }
+      }
+    } catch (error) {
+      console.error('Brave search error:', error);
+    }
+  }
+
+  // Fallback: DuckDuckGo (free, no key required)
+  try {
+    const ddgResponse = await fetch(
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`
+    );
+    
+    if (ddgResponse.ok) {
+      const data = await ddgResponse.json();
+      const results: any[] = [];
+      
+      if (data.Abstract && data.AbstractURL) {
+        results.push({
+          title: data.Heading || query,
+          url: data.AbstractURL,
+          description: data.Abstract,
+          age: 'Recent',
+        });
+      }
+      
+      if (data.RelatedTopics) {
+        data.RelatedTopics.slice(0, 8).forEach((topic: any) => {
+          if (topic.Text && topic.FirstURL) {
+            results.push({
+              title: topic.Text.split(' - ')[0] || topic.Text,
+              url: topic.FirstURL,
+              description: topic.Text,
+              age: 'Recent',
+            });
+          }
+        });
+      }
+      
+      if (results.length > 0) {
+        console.log(`DuckDuckGo returned ${results.length} results for: ${query}`);
+        return results;
+      }
+    }
+  } catch (error) {
+    console.error('DuckDuckGo search error:', error);
+  }
+
+  console.log('No search results for:', query);
+  return [];
+}
+
+// Backwards compatibility alias
+async function searchBrave(query: string): Promise<any[]> {
+  return searchWeb(query);
 }
 
 async function analyzeWithOllama(supplierName: string, prompt: string): Promise<Partial<SupplierIntel> | null> {
