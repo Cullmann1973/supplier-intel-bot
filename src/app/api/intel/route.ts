@@ -176,6 +176,7 @@ async function analyzeWithOllama(supplierName: string, prompt: string): Promise<
 }
 
 async function analyzeWithAI(supplierName: string, searchResults: any[]): Promise<Partial<SupplierIntel>> {
+  const groqKey = process.env.GROQ_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   
@@ -223,7 +224,44 @@ Provide your analysis in this exact JSON format (no markdown, just raw JSON):
 
 Be specific and factual where possible. For unknown companies, make reasonable inferences based on the name and any available context. Always provide complete JSON.`;
 
-  // Try Anthropic first if available
+  // Try Groq first (free and fast)
+  if (groqKey) {
+    console.log('Calling Groq for analysis...');
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${groqKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 1500,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices[0]?.message?.content || '';
+        console.log('Groq response received, parsing...');
+        
+        try {
+          const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
+          return JSON.parse(jsonStr);
+        } catch (parseError) {
+          console.error('Failed to parse Groq response as JSON:', parseError);
+        }
+      } else {
+        console.error('Groq response not OK:', response.status);
+      }
+    } catch (error) {
+      console.error('Groq API error:', error);
+    }
+  }
+
+  // Try Anthropic if available
   if (anthropicKey) {
     console.log('Calling Anthropic for analysis...');
     try {

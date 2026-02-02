@@ -9,6 +9,49 @@ interface Supplier {
   trend: 'up' | 'down' | 'flat';
 }
 
+async function analyzeWithGroq(suppliers: Supplier[]): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) return null;
+
+  const prompt = `You are a supply chain risk analyst. Analyze this supplier portfolio and provide strategic insights.
+
+SUPPLIER DATA:
+${JSON.stringify(suppliers, null, 2)}
+
+Provide a concise analysis covering:
+1. **Critical Risks**: Which suppliers need immediate attention and why
+2. **Portfolio Vulnerabilities**: Concentration risks, geographic exposure
+3. **Recommendations**: Specific actions to improve supply chain resilience
+4. **Opportunities**: Suppliers showing positive trends to leverage
+
+Be specific and actionable. Keep it under 400 words.`;
+
+  try {
+    console.log('Calling Groq for portfolio analysis...');
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${groqKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 800,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.choices[0]?.message?.content || null;
+    }
+  } catch (error) {
+    console.error('Groq API error:', error);
+  }
+  return null;
+}
+
 async function analyzeWithOllama(suppliers: Supplier[]): Promise<string | null> {
   const ollamaUrls = [
     'http://127.0.0.1:11434',
@@ -111,9 +154,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Suppliers array required' }, { status: 400 });
     }
 
-    // Try Ollama first
+    // Try Groq first (free cloud API)
+    const groqAnalysis = await analyzeWithGroq(suppliers);
+    if (groqAnalysis) {
+      return NextResponse.json({ 
+        analysis: groqAnalysis,
+        source: 'groq',
+      });
+    }
+
+    // Try Ollama (local)
     const ollamaAnalysis = await analyzeWithOllama(suppliers);
-    
     if (ollamaAnalysis) {
       // Clean up thinking tags if present (for models that use them)
       let cleanedAnalysis = ollamaAnalysis;
