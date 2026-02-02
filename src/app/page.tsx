@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { gsap } from 'gsap';
-import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe, Clock, X, Sparkles, ChevronRight, Scale, ArrowRight } from 'lucide-react';
+import { Search, Building2, Shield, TrendingUp, AlertTriangle, Globe, Clock, X, Sparkles, ChevronRight, Scale, ArrowRight, BarChart3 } from 'lucide-react';
 
 export default function Home() {
   const [supplierName, setSupplierName] = useState('');
@@ -237,8 +237,24 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Compare Feature */}
-        <div className="max-w-2xl mx-auto">
+        {/* Dashboard & Compare Features */}
+        <div className="max-w-2xl mx-auto space-y-3">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full card card-interactive p-4 flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-600/20">
+                <BarChart3 className="w-5 h-5 text-orange-400" />
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-white">Risk Dashboard</div>
+                <div className="text-sm text-[var(--text-tertiary)]">Monitor your supplier portfolio with AI</div>
+              </div>
+            </div>
+            <ArrowRight className="w-5 h-5 text-[var(--text-quaternary)] group-hover:text-orange-400 group-hover:translate-x-1 transition-all" />
+          </button>
+
           <button
             onClick={() => router.push('/compare')}
             className="w-full card card-interactive p-4 flex items-center justify-between group"

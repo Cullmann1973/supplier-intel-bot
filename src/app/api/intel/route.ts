@@ -94,28 +94,56 @@ async function searchBrave(query: string): Promise<any[]> {
 }
 
 async function analyzeWithOllama(supplierName: string, prompt: string): Promise<Partial<SupplierIntel> | null> {
-  // Ollama URLs - check for tunnel URL first (for Vercel deployment)
+  // Ollama URLs - check local first, then tunnel for remote
   const tunnelUrl = process.env.OLLAMA_URL;
   const ollamaUrls = [
+    'http://127.0.0.1:11434',           // Local Mac (priority)
+    'http://localhost:11434',           // Local Mac alternate
+    'http://192.168.50.1:11434',        // Windows PC (local network)
     ...(tunnelUrl ? [tunnelUrl] : []),  // Cloudflare tunnel (production)
-    'http://192.168.50.1:11434',        // Windows PC (local dev)
-    'http://localhost:11434',           // Local Mac (local dev)
+  ];
+  
+  // Try to detect which model is available
+  const preferredModels = [
+    'qwen3:30b-a3b',                    // Mac local model (MoE, fast)
+    'qwen3-coder:30b',                  // Windows PC model
+    'deepseek-r1:8b-0528-qwen3-q8_0',   // Fallback
   ];
   
   for (const baseUrl of ollamaUrls) {
     try {
       console.log(`Trying Ollama at ${baseUrl}...`);
+      
+      // First check which models are available
+      const tagsRes = await fetch(`${baseUrl}/api/tags`, { 
+        signal: AbortSignal.timeout(3000) 
+      });
+      
+      if (!tagsRes.ok) continue;
+      
+      const tagsData = await tagsRes.json();
+      const availableModels = tagsData.models?.map((m: any) => m.name) || [];
+      
+      // Pick the best available model
+      const modelToUse = preferredModels.find(m => availableModels.includes(m)) || availableModels[0];
+      if (!modelToUse) continue;
+      
+      console.log(`Using model: ${modelToUse}`);
+      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
       
       const response = await fetch(`${baseUrl}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'deepseek-r1:8b-0528-qwen3-q8_0',
-          prompt: prompt + '\n\nRespond with ONLY valid JSON, no other text.',
+          model: modelToUse,
+          prompt: prompt + '\n\nRespond with ONLY valid JSON, no other text. Do not include any thinking or explanation.',
           stream: false,
-          options: { temperature: 0.7 }
+          options: { 
+            temperature: 0.7,
+            num_predict: 1500,
+          }
         }),
         signal: controller.signal,
       });
@@ -124,8 +152,11 @@ async function analyzeWithOllama(supplierName: string, prompt: string): Promise<
       
       if (response.ok) {
         const data = await response.json();
-        const content = data.response || '';
+        let content = data.response || '';
         console.log('Ollama response received');
+        
+        // Clean up thinking tags if present
+        content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         
         // Extract JSON from response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
