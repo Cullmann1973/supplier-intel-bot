@@ -171,6 +171,78 @@ async function searchBrave(query: string): Promise<any[]> {
   return searchWeb(query);
 }
 
+// Google News RSS - FREE, no API key required!
+async function searchGoogleNews(query: string): Promise<any[]> {
+  try {
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+    console.log(`Fetching Google News RSS for: ${query}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; SupplierIntelBot/1.0)',
+      },
+    });
+    
+    if (!response.ok) {
+      console.error('Google News RSS error:', response.status);
+      return [];
+    }
+    
+    const xml = await response.text();
+    const results: any[] = [];
+    
+    // Parse RSS XML (simple regex parsing for <item> elements)
+    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+    const titleRegex = /<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/;
+    const linkRegex = /<link>(.*?)<\/link>/;
+    const pubDateRegex = /<pubDate>(.*?)<\/pubDate>/;
+    const sourceRegex = /<source[^>]*>(.*?)<\/source>/;
+    
+    let match;
+    while ((match = itemRegex.exec(xml)) !== null && results.length < 10) {
+      const item = match[1];
+      
+      const titleMatch = item.match(titleRegex);
+      const linkMatch = item.match(linkRegex);
+      const dateMatch = item.match(pubDateRegex);
+      const sourceMatch = item.match(sourceRegex);
+      
+      if (titleMatch && linkMatch) {
+        const title = (titleMatch[1] || titleMatch[2] || '').trim();
+        const link = linkMatch[1].trim();
+        const pubDate = dateMatch ? dateMatch[1].trim() : '';
+        const source = sourceMatch ? sourceMatch[1].trim() : '';
+        
+        // Parse the date to relative time
+        let age = 'Recent';
+        if (pubDate) {
+          const date = new Date(pubDate);
+          const now = new Date();
+          const diffHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+          if (diffHours < 1) age = 'Just now';
+          else if (diffHours < 24) age = `${diffHours} hours ago`;
+          else if (diffHours < 48) age = 'Yesterday';
+          else age = `${Math.floor(diffHours / 24)} days ago`;
+        }
+        
+        results.push({
+          title: title.replace(/ - .*$/, ''), // Remove source suffix from title
+          url: link,
+          description: `News from ${source || 'Google News'}`,
+          source: source || 'Google News',
+          age,
+        });
+      }
+    }
+    
+    console.log(`Google News returned ${results.length} results for: ${query}`);
+    return results;
+  } catch (error) {
+    console.error('Google News RSS error:', error);
+    return [];
+  }
+}
+
 async function analyzeWithOllama(supplierName: string, prompt: string): Promise<Partial<SupplierIntel> | null> {
   // Ollama URLs - check local first, then tunnel for remote
   const tunnelUrl = process.env.OLLAMA_URL;
@@ -631,6 +703,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Search for company info + reputation data
+    // Use Google News RSS for news (FREE, no API key!)
     const [
       companyResults, 
       newsResults, 
@@ -641,7 +714,7 @@ export async function GET(request: NextRequest) {
       regulatoryResults
     ] = await Promise.all([
       searchBrave(`${supplier} company profile overview`),
-      searchBrave(`${supplier} news 2024 2025`),
+      searchGoogleNews(`${supplier}`), // Google News RSS - FREE!
       searchBrave(`${supplier} supply chain risk issues`),
       // Reputation searches
       searchBrave(`"${supplier}" reviews complaints consumer feedback`),
