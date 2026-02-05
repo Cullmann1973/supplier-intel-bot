@@ -5,147 +5,143 @@ interface ChatMessage {
   content: string;
 }
 
-// Web search using Serper.dev (free tier) or Brave API
+// Web search — free sources first, paid APIs as bonus if configured
 async function searchWeb(query: string): Promise<string> {
-  // Try Serper.dev first (free tier available)
-  const serperKey = process.env.SERPER_API_KEY;
-  if (serperKey) {
-    try {
-      const response = await fetch('https://google.serper.dev/search', {
-        method: 'POST',
-        headers: {
-          'X-API-KEY': serperKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ q: query, num: 5 }),
-      });
+  const allResults: string[] = [];
 
-      if (response.ok) {
-        const data = await response.json();
-        const results = data.organic || [];
-        if (results.length > 0) {
-          return results
-            .slice(0, 5)
-            .map((r: any) => `- ${r.title}: ${r.snippet || ''} (Source: ${r.link})`)
-            .join('\n');
-        }
-      }
-    } catch (error) {
-      console.error('Serper search error:', error);
-    }
-  }
-
-  // Try Brave API
-  const braveKey = process.env.BRAVE_API_KEY;
-  if (braveKey) {
-    try {
-      const response = await fetch(
-        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
-        {
-          headers: {
-            'Accept': 'application/json',
-            'X-Subscription-Token': braveKey,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const results = data.web?.results || [];
-        if (results.length > 0) {
-          return results
-            .slice(0, 5)
-            .map((r: any) => `- ${r.title}: ${r.description || ''} (Source: ${r.url})`)
-            .join('\n');
-        }
-      }
-    } catch (error) {
-      console.error('Brave search error:', error);
-    }
-  }
-
-  // Try Google News RSS (free, no key required)
+  // 1. Google News RSS (FREE, no key required) — best for current events
   try {
     const newsUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
     const newsResponse = await fetch(newsUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SupplierIntelBot/1.0)' },
+      signal: AbortSignal.timeout(8000),
     });
     
     if (newsResponse.ok) {
       const xml = await newsResponse.text();
-      const results: string[] = [];
       const itemRegex = /<item>([\s\S]*?)<\/item>/g;
       const titleRegex = /<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/;
       const linkRegex = /<link>(.*?)<\/link>/;
+      const pubDateRegex = /<pubDate>(.*?)<\/pubDate>/;
       const sourceRegex = /<source[^>]*>(.*?)<\/source>/;
       
       let match;
-      while ((match = itemRegex.exec(xml)) !== null && results.length < 5) {
+      let newsCount = 0;
+      while ((match = itemRegex.exec(xml)) !== null && newsCount < 5) {
         const item = match[1];
         const titleMatch = item.match(titleRegex);
         const linkMatch = item.match(linkRegex);
+        const dateMatch = item.match(pubDateRegex);
         const sourceMatch = item.match(sourceRegex);
         
         if (titleMatch && linkMatch) {
           const title = (titleMatch[1] || titleMatch[2] || '').trim();
           const source = sourceMatch ? sourceMatch[1].trim() : 'Google News';
-          results.push(`- ${title} (Source: ${source})`);
+          let dateStr = '';
+          if (dateMatch) {
+            const d = new Date(dateMatch[1]);
+            const diffH = Math.floor((Date.now() - d.getTime()) / 3600000);
+            dateStr = diffH < 24 ? `${diffH}h ago` : diffH < 48 ? 'yesterday' : `${Math.floor(diffH / 24)}d ago`;
+          }
+          allResults.push(`- [NEWS${dateStr ? ' ' + dateStr : ''}] ${title} (Source: ${source})`);
+          newsCount++;
         }
       }
-      
-      if (results.length > 0) {
-        console.log(`Google News returned ${results.length} results for: ${query}`);
-        return results.join('\n');
+      if (newsCount > 0) {
+        console.log(`Google News returned ${newsCount} results for: ${query}`);
       }
     }
   } catch (error) {
     console.error('Google News RSS error:', error);
   }
 
-  // Fallback: DuckDuckGo Instant Answer (free, no key)
+  // 2. DuckDuckGo Instant Answer (FREE, no key) — good for factual/reference info
   try {
     const ddgResponse = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`,
+      { signal: AbortSignal.timeout(5000) }
     );
     
     if (ddgResponse.ok) {
       const data = await ddgResponse.json();
-      const results: string[] = [];
       
       if (data.Abstract) {
-        results.push(`- ${data.Heading}: ${data.Abstract} (Source: ${data.AbstractURL})`);
+        allResults.push(`- [REF] ${data.Heading}: ${data.Abstract} (Source: ${data.AbstractURL})`);
       }
       
       if (data.RelatedTopics) {
-        data.RelatedTopics.slice(0, 4).forEach((topic: any) => {
+        data.RelatedTopics.slice(0, 3).forEach((topic: any) => {
           if (topic.Text && topic.FirstURL) {
-            results.push(`- ${topic.Text} (Source: ${topic.FirstURL})`);
+            allResults.push(`- [REF] ${topic.Text} (Source: ${topic.FirstURL})`);
           }
         });
-      }
-      
-      if (results.length > 0) {
-        return results.join('\n');
       }
     }
   } catch (error) {
     console.error('DuckDuckGo search error:', error);
   }
 
-  return '';
+  // 3. Serper.dev (paid, if configured)
+  const serperKey = process.env.SERPER_API_KEY;
+  if (serperKey && allResults.length < 3) {
+    try {
+      const response = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: query, num: 5 }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        (data.organic || []).slice(0, 5).forEach((r: any) => {
+          allResults.push(`- ${r.title}: ${r.snippet || ''} (Source: ${r.link})`);
+        });
+      }
+    } catch (error) {
+      console.error('Serper search error:', error);
+    }
+  }
+
+  // 4. Brave API (paid, if configured)
+  const braveKey = process.env.BRAVE_API_KEY;
+  if (braveKey && allResults.length < 3) {
+    try {
+      const response = await fetch(
+        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+        {
+          headers: { 'Accept': 'application/json', 'X-Subscription-Token': braveKey },
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        (data.web?.results || []).slice(0, 5).forEach((r: any) => {
+          allResults.push(`- ${r.title}: ${r.description || ''} (Source: ${r.url})`);
+        });
+      }
+    } catch (error) {
+      console.error('Brave search error:', error);
+    }
+  }
+
+  console.log(`Total search results: ${allResults.length}`);
+  return allResults.join('\n');
 }
 
 // Detect if question needs web search
+// Broadly permissive — if we have a supplier context, almost any question benefits from search
 function needsWebSearch(message: string): boolean {
-  const searchTriggers = [
-    'fda', 'epa', 'osha', 'warning', 'recall', 'inspection', 'lawsuit', 'lawsuit',
-    'recent', 'latest', 'news', 'current', 'today', '2024', '2025', '2026',
-    'plant', 'factory', 'location', 'facility', 'manufacture',
-    'competitor', 'acquisition', 'merger', 'bankruptcy', 'financial',
-    'certification', 'iso', 'audit', 'violation', 'fine', 'penalty'
+  // Skip search only for trivial/meta messages
+  const skipPatterns = [
+    /^(hi|hello|hey|thanks|thank you|ok|bye|yes|no)\.?$/i,
+    /^what can you do/i,
+    /^help$/i,
   ];
-  const lower = message.toLowerCase();
-  return searchTriggers.some(trigger => lower.includes(trigger));
+  if (skipPatterns.some(p => p.test(message.trim()))) {
+    return false;
+  }
+  // Everything else gets search — users chatting about a supplier want current info
+  return message.trim().length > 5;
 }
 
 // Try multiple AI providers with fallback
@@ -278,7 +274,17 @@ export async function POST(request: NextRequest) {
     let webSearchResults = '';
     if (needsWebSearch(message) && supplierName) {
       console.log('Performing web search for:', message);
-      const searchQuery = `${supplierName} ${message}`;
+      
+      // Build a focused search query — don't dump the entire user message
+      const queryKeywords = message
+        .replace(/[?!.,;:'"]/g, '')
+        .split(/\s+/)
+        .filter(w => w.length > 3)
+        .slice(0, 6)
+        .join(' ');
+      const searchQuery = `${supplierName} ${queryKeywords}`;
+      console.log('Search query:', searchQuery);
+      
       webSearchResults = await searchWeb(searchQuery);
       if (webSearchResults) {
         console.log('Web search returned results');
