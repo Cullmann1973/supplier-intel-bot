@@ -64,6 +64,44 @@ async function searchWeb(query: string): Promise<string> {
     }
   }
 
+  // Try Google News RSS (free, no key required)
+  try {
+    const newsUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+    const newsResponse = await fetch(newsUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SupplierIntelBot/1.0)' },
+    });
+    
+    if (newsResponse.ok) {
+      const xml = await newsResponse.text();
+      const results: string[] = [];
+      const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+      const titleRegex = /<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/;
+      const linkRegex = /<link>(.*?)<\/link>/;
+      const sourceRegex = /<source[^>]*>(.*?)<\/source>/;
+      
+      let match;
+      while ((match = itemRegex.exec(xml)) !== null && results.length < 5) {
+        const item = match[1];
+        const titleMatch = item.match(titleRegex);
+        const linkMatch = item.match(linkRegex);
+        const sourceMatch = item.match(sourceRegex);
+        
+        if (titleMatch && linkMatch) {
+          const title = (titleMatch[1] || titleMatch[2] || '').trim();
+          const source = sourceMatch ? sourceMatch[1].trim() : 'Google News';
+          results.push(`- ${title} (Source: ${source})`);
+        }
+      }
+      
+      if (results.length > 0) {
+        console.log(`Google News returned ${results.length} results for: ${query}`);
+        return results.join('\n');
+      }
+    }
+  } catch (error) {
+    console.error('Google News RSS error:', error);
+  }
+
   // Fallback: DuckDuckGo Instant Answer (free, no key)
   try {
     const ddgResponse = await fetch(
